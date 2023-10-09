@@ -154,3 +154,31 @@ commit信息会随着AppendEntries（心跳or下一条日志）发送给follower
 1. **确定操作顺序**：leader收到不同操作后通过日志确定顺序
 2. **缓存操作**：follower收到操作后缓存，等待leader发送commit信号；leader缓存操作，给follower重发信号
 3. **状态恢复**：
+
+
+# 实验
+lab2 是后续实验的基础，实现一个Raft，lab3实现的KV是在Raft上的。
+## 论文中给出的算法
+### State状态
+#### 需要持久化的state（所有server）
+1. **currentTerm**：server所处的term，也是该server所得知的最新term
+2. **votedFor**：如果是null，则该term内尚未投票，如果是candidateID，则该term中的选举已经投票给了该candidate（不能再投票）。
+3. **log[]**：当前server的所有log entries，每一条log entry包含命令和term编号
+#### 易失state（所有server）
+1. **commitIndex**：最大的已经commit的log entries index
+2. **lastApplied**：最新加入的log entries index
+#### 易失state（leader独有）
+1. **nextIndex[]**：需要发给每一个follower的下一条log entry（初始化值是leader的最后一个log entry的下一个值）
+2. **matchIndex[]**：不懂为什么需要这个东西
+### AppendEntries RPC
+#### 参数
+1. **term**：leader的当前term编号
+2. **leaderId**：leader的id，方便follower将收到的信息转发给leader
+3. **prevLogIndex**：前一个log的index，方便follower确认一致性
+4. **prevLogTerm**：前一个log的term，功能同上
+5. **entries[]**：需要拷贝的log entry，心跳信息会是空
+6. **leaderCommit**：leader提交的日志 entry index
+#### 返回值
+1. **term**：
+## Lab2A
+实现一个Raft选举算法
