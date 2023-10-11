@@ -154,6 +154,9 @@ commit信息会随着AppendEntries（心跳or下一条日志）发送给follower
 1. **确定操作顺序**：leader收到不同操作后通过日志确定顺序
 2. **缓存操作**：follower收到操作后缓存，等待leader发送commit信号；leader缓存操作，给follower重发信号
 3. **状态恢复**：
+### 应用层接口
+1. (index, term) start(command):client给server发送请求的接口，如果发给了follower，follower将会转发给leader （客户端要term干嘛？）
+2. applyMsg(command, index): commit命令后，返回给client的index和command（）
 
 # 论文中给出的算法
 ## State状态
@@ -161,15 +164,15 @@ commit信息会随着AppendEntries（心跳or下一条日志）发送给follower
 ### 需要持久化的state（所有server）
 1. **currentTerm**：server所处的term，也是该server所得知的最新term
 2. **votedFor**：如果是null，则该term内尚未投票，如果是candidateID，则该term中的选举已经投票给了该candidate（不能再投票）。
-3. **log[]**：当前server的所有log entries，每一条log entry包含命令和term编号
+3. **log**[]：当前server的所有log entries，每一条log entry包含命令和term编号
 
 ### 易失state（所有server）
 1. **commitIndex**：最大的已经commit的log entries index
 2. **lastApplied**：最新加入的log entries index
 
 ### 易失state（leader独有）
-1. **nextIndex[]**：需要发给每一个follower的下一条log entry（初始化值是leader的最后一个log entry的下一个值）
-2. **matchIndex[]**：不懂为什么需要这个东西
+1. **nextIndex**[]：需要发给每一个follower的下一条log entry（初始化值是leader的最后一个log entry的下一个值）
+2. **matchIndex**[]：每个follower当前匹配到哪一条log entry（初始化值为0）
 
 
 ## AppendEntries RPC
@@ -180,7 +183,7 @@ leader->follower
 2. **leaderId**：leader的id，方便follower将收到的信息转发给leader
 3. **prevLogIndex**：前一个log的index，方便follower确认一致性
 4. **prevLogTerm**：前一个log的term，功能同上
-5. **entries[]**：需要拷贝的多条log entry，心跳信息会是空
+5. **entries**[]：需要拷贝的多条log entry，心跳信息会是空
 6. **leaderCommit**：leader提交的日志 entry index
 
 或许可以带上leader自己的log entries，便于找nextIndex
@@ -235,3 +238,15 @@ lab2 是后续实验的基础，实现一个Raft，lab3实现的KV是在Raft上�
 
 ## Lab2A
 实现一个Raft选举算法
+### 线程梳理
+Raft运行主线程，不断地切换状态，切换的过程是由上一个状态创建新状态并返回其指针
+状态的run函数在Raft主线程中运行，会创建多个线程。以下按状态机类型梳理线程
+#### 所有server，尤其是Follower
+1. 计算超时的线程timeOut。（单独开一个类来承担这个职责）Sleep超时计时器的时间后检测是否有收到过AppendEntries RPC（这里需要一个标志位）。如果收到过，则复位标志位，并Sleep，如果没有收到过，则终止当前状态（该状态会创建candidate状态返回），退出该线程。这里的终止状态需要考虑到RPC Server的退出，根据[rest_rpc在GitHub的issue](https://github.com/qicosmos/rest_rpc/issues/51)中提到的，可以通过智能指针创建server，退出时将其置为nullptr。
+2. 等待接收AppendEntries。开一条线程用于RPC通信，接收其他server（此处指leader）的AppendEntries请求，这里需要对log相关变量加锁，避免产生幻觉
+3. 投票线程RequestVote。开一条线程用于RPC通信，接收其他server（此处指candidate）的RequestVote请求，这里需要对vote相关变量加锁，避免产生幻觉
+#### Leader
+1. 等待client的start。开一条线程用于RPC通信，接收client的command，这里需要对log相关变量加锁，避免产生幻觉
+2. 发送AppendEntries的线程。调用其他server的AppendEntries，并异步等待结果。
+#### Candidate
+1. 发送RequestVote的线程。调用其他server的RequestVote，并异步等待结果。
