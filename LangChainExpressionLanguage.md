@@ -2,6 +2,8 @@
 title: LangChain Expression Language
 date: 2023-10-16 15:27:33
 tags:
+    - LCEL
+    - LangChain
 ---
 LCEL
 <!-- more -->
@@ -72,6 +74,7 @@ Runnable对象是LCEL 的核心组成部分，如上文所示，Langchain在此�
 1. **stream**方法：调用Runnable时以**流式**返回输出结果（什么叫做流式返回？）
 2. **invoke**方法：基于一个input调用Runnable
 3. **batch**方法：基于一个list的input**批量**调用Runnable
+
 上述方法都是同步的，前面加上a就是异步方法。
 对于上述的三种方法，LCEL不同的Runnable对象支持接收不同的输入，并产生不同的输出，在Python中，能够使用“|”将前一个Runnable对象的输出传递到下一个Runnable对象作为输入，以此达到灵活自定义Prompt并实现“简洁地构建复杂LLM应用”的目的。
 LCEL中定义的Runnable对象包括之前提到6大module，其输入输出跟原来介绍的无异。
@@ -97,7 +100,7 @@ runnable = {"equation_statement": RunnablePassthrough()} | prompt | model | StrO
 print(runnable.invoke("x raised to the third plus seven equals 12"))
 ```
 输出会很啰嗦，如下所示
-```
+```bash
     EQUATION: x^3 + 7 = 12
     
     SOLUTION:
@@ -121,11 +124,11 @@ runnable = (
 print(runnable.invoke("x raised to the third plus seven equals 12"))
 ```
 这个时候，输出就会变成
-```
+```bash
 EQUATION: x^3 + 7 = 12
 ```
 # fallback
-## 异常处理
+## 单对象级别的异常处理
 LLM的调用/输出可能会因为各种原因崩坏，比方说网络问题（伟大的城墙）、基座模型太拉（你可能调用了文心一言。。。）
 加入fallback相当于一个try throw catch中的catch，在出错时给出一个后备选项。
 给出下面的例子：
@@ -175,8 +178,8 @@ with patch('openai.ChatCompletion.create', side_effect=RateLimitError()):
         print("Hit error")
 ```
 
-## 回退
-其实是进一步的异常处理，直接把序列给换了
+## 链级别的异常处理
+进一步的异常处理，直接把序列给换了
 例子：
 ```python
 # 创建一个会发生异常的chain——bad_chain
@@ -209,35 +212,150 @@ chain = bad_chain.with_fallbacks([good_chain])
 chain.invoke({"animal": "turtle"})
 ```
 
-# 调用函数
-在chain中调用的函数必须是单输入的，如果要用多输入的话，多写一个adaptor调整成单输入的
+# 调用函数 
+在chain中可以调用任意函数，用RunnableLambda声明即可，但是调用的函数必须是单输入的，如果要用多输入的话，多写一个adaptor调整成单输入的。
+以下是一个用函数对输入进行映射处理的例子：
 ```python
 from langchain.schema.runnable import RunnableLambda
 from langchain.prompts import ChatPromptTemplate
 from langchain.chat_models import ChatOpenAI
 from operator import itemgetter
 
+# 计算字符串长度
 def length_function(text):
     return len(text)
-
+# 计算两个字符串长度乘积
 def _multiple_length_function(text1, text2):
     return len(text1) * len(text2)
 
 def multiple_length_function(_dict):
     return _multiple_length_function(_dict["text1"], _dict["text2"])
 
+# 提示词模板
 prompt = ChatPromptTemplate.from_template("what is {a} + {b}")
+# 模型
 model = ChatOpenAI()
-
+# 应该是个没用的东西
 chain1 = prompt | model
-
+# 定义chain
 chain = {
     "a": itemgetter("foo") | RunnableLambda(length_function),
     "b": {"text1": itemgetter("foo"), "text2": itemgetter("bar")} | RunnableLambda(multiple_length_function)
 } | prompt | model
+# 调用
 chain.invoke({"foo": "bar", "bar": "gah"})
 ```
 输出是
-```
+```bash
 AIMessage(content='3 + 9 equals 12.', additional_kwargs={}, example=False)
 ```
+# 并行计算 Parallel
+提供的接口是RunnableParallel/RunnableMap，可以允许多个runnable对象并行调用，并以map的形式返回数据。
+例如：
+```python
+from langchain.chat_models import ChatOpenAI
+from langchain.prompts import ChatPromptTemplate
+from langchain.schema.runnable import RunnableParallel
+
+# 选择模型
+model = ChatOpenAI()
+# 定义第一个chain
+joke_chain = ChatPromptTemplate.from_template("tell me a joke about {topic}") | model
+# 定义第二个chain
+poem_chain = ChatPromptTemplate.from_template("write a 2-line poem about {topic}") | model
+
+# 定义并行chain
+map_chain = RunnableParallel(joke=joke_chain, poem=poem_chain)
+# 调用并行chain
+map_chain.invoke({"topic": "bear"})
+```
+输出是：
+```bash
+    {'joke': AIMessage(content="Why don't bears wear shoes? \n\nBecause they have bear feet!", additional_kwargs={}, example=False),
+     'poem': AIMessage(content="In woodland depths, bear prowls with might,\nSilent strength, nature's sovereign, day and night.", additional_kwargs={}, example=False)}
+```
+# 动态路由 Route
+路由允许创建非确定性的链，即根据上一步的输出定义下一步。LCEL提供两种方法执行路由
+1. 使用`.RunnableBranch`
+2. 自定义函数
+
+有点switch case的感觉
+## RunnableBranch
+
+```python
+from langchain.prompts import PromptTemplate
+from langchain.chat_models import ChatAnthropic
+from langchain.schema.output_parser import StrOutputParser
+# 创建第一个链，作用是对提问进行分类
+chain = PromptTemplate.from_template("""Given the user question below, classify it as either being about `LangChain`, `Anthropic`, or `Other`.
+                                     
+Do not respond with more than one word.
+
+<question>
+{question}
+</question>
+
+Classification:""") | ChatAnthropic() | StrOutputParser()
+
+
+# 创建子链，给模型不同的模板（要求）
+langchain_chain = PromptTemplate.from_template("""You are an expert in langchain. \
+Always answer questions starting with "As Harrison Chase told me". \
+Respond to the following question:
+
+Question: {question}
+Answer:""") | ChatAnthropic()
+anthropic_chain = PromptTemplate.from_template("""You are an expert in anthropic. \
+Always answer questions starting with "As Dario Amodei told me". \
+Respond to the following question:
+
+Question: {question}
+Answer:""") | ChatAnthropic()
+general_chain = PromptTemplate.from_template("""Respond to the following question:
+
+Question: {question}
+Answer:""") | ChatAnthropic()
+
+from langchain.schema.runnable import RunnableBranch
+# 定义一个可运行的branch，用lambda表达式写条件判断
+branch = RunnableBranch(
+  (lambda x: "anthropic" in x["topic"].lower(), anthropic_chain),
+  (lambda x: "langchain" in x["topic"].lower(), langchain_chain),
+  general_chain
+)
+
+# 一个包含branch的链
+full_chain = {
+    "topic": chain,
+    "question": lambda x: x["question"]
+} | branch
+full_chain.invoke({"question": "how do I use Anthropic?"})
+full_chain.invoke({"question": "how do I use LangChain?"})
+full_chain.invoke({"question": "whats 2 + 2"})
+```
+输出：
+```bash
+    AIMessage(content=" As Dario Amodei told me, ~", additional_kwargs={}, example=False)
+    AIMessage(content=' As Harrison Chase told me, ~', additional_kwargs={}, example=False)
+    AIMessage(content=' 2 + 2 = 4', additional_kwargs={}, example=False)
+```
+## 自定义路由函数
+
+```python
+# 路由函数
+def route(info):
+    if "anthropic" in info["topic"].lower():
+        return anthropic_chain
+    elif "langchain" in info["topic"].lower():
+        return langchain_chain
+    else:
+        return general_chain
+from langchain.schema.runnable import RunnableLambda
+
+# 调用路由函数
+full_chain = {
+    "topic": chain,
+    "question": lambda x: x["question"]
+} | RunnableLambda(route)
+```
+会有同样的输出
