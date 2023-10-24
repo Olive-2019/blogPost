@@ -71,7 +71,7 @@ llm_chain.invoke({"content": "春天去郊游"})
 # 接口
 Runnable对象是LCEL的核心组成部分，Langchain官方对这样的对象统一定义了三个共同的接口，当对象和函数满足这三个接口时，便可被称之为一个Runnable对象。
 1. **stream**方法：调用Runnable时以**流式**返回输出结果（格式好看一点？）
-2. **invoke**方法：基于一个input调用Runnable
+2. **invoke**方法：基于**单个**input调用Runnable
 3. **batch**方法：基于一个list的input**批量**调用Runnable
 
 上述方法都是同步的，前面加上a就是异步方法。
