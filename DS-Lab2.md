@@ -128,6 +128,7 @@ classDiagram
     POJO <|-- AppendEntries
     POJO <|-- RequestVote
     POJO <|-- LogEntry
+    POJO <|-- Answer
 ```
 
 ### 线程梳理
@@ -208,4 +209,35 @@ stateDiagram-v2
 bug：目前第一次vote无法成功接收
 debug方向：
 1. 调试一个follower，查看其第一次vote结果是否正常返回
-2. 调试一个candidate，查看其收到的数据是否正常解码（可能性较大）
+2. 调试一个candidate，查看其收到的数据是否正常解码（可能性较大）**返回值为空！**
+
+#### 2023年10月27日
+bug：candidate调用requestVote返回值为空字符串
+debug方向：
+1. sendRequestVote没有成功：已排除，follower端可以收到信息
+2. follower端没有返回值：基本排除，follower端能打出返回值
+3. rpc的问题：感觉这个可能性比较大，但是似乎没有办法debug，而且其他调用没有出问题，为什么只有这个会出问题？
+解决方案：
+1. 强行跳过返回值为空的future，失败，应该是所有返回值都为空
+2. 原有序列化方式可能存在问题（手动序列化），更换序列化方式（√）
+3. 更改注册方式，使用原始方式（√）
+
+#### 2023年10月28日
+已修复上述bug
+
+#### 2023年10月29日
+bug: Leader 调用 sendAppendEntries 无法正常到达follower
+debug方向：
+1. 发送端没有发送成功，follower端没有收到信息(x)
+2. 发送端发送成功，follower端没有收到信息(x)
+3. 发送端发送成功，follower端收到信息，但是无法解码(x)
+4. 发送端发送成功，但是发送端的信息错误，目前定位到问题在于Leader::checkFollowers中，nextIndex[followerID] >= logEntries.size()没有按逻辑执行，初步猜测是logEntries的异步访问导致的，但是加锁无用
+已修复，发送端编码也有问题，多加一个空格就好（有精力要把接口都改成官方提供的序列化接口）
+
+## Lab2B
+实现AppendEntries，写Lab2A的时候已经完成了，只需要加上client端发送start和接收applyMsg的逻辑
+## Lab2C
+持久化，每隔一段时间将需要持久化的状态写一次磁盘
+## Lab2D
+快照，这个需要进一步设计，目前打算借助AppendEntries，添加标志位完成。
+
