@@ -248,8 +248,14 @@ debug方向：
 ### leader处理逻辑
 commitedIndex超过命令阈值后需要进行写快照并删除命令，具体操作为
 1. 判断commitedIndex是否大于快照阈值，若小于则退出
-2. 给所有follower发送带有快照请求的AppendEntries
+2. 给所有follower发送带有快照请求的AppendEntries（单独开了一个缓冲区，部分复用发appendEntries的代码逻辑，但是对其进行了侵入式改造）
 3. 若半数以上的follower返回成功，则写快照（即给上层应用发送的applyMsg里附加写磁盘命令）并删除命令
 4. 修改nextIndex和matchIndex，同时减去删除的命令数量（即commitedIndex + 1）
 ### candidate处理逻辑
 同follower，因为candidate收到AppendEntries时说明该进入Follower状态了
+
+## 通信级别
+### 节点间通信
+由于节点间通信失败率较高，各状态机间通信是可信交付，会有验证重发机制
+### 节点内通信
+节点内通信失败率低，状态机和上层应用间通信是不可信交付，不需要重发机制
