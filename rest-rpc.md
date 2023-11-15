@@ -17,9 +17,9 @@ rest_rpc支持C++调用，其配置过程如下
 3. 双击根目录下的bootstrap.bat文件，生成b2.exe
 4. 双击b2.exe运行
 5. VS studio 配置项目属性->VC++目录
-(1) "包含目录": boost的根目录，例:C:\boost_1_79_0
-(2) "库目录": stage下的链接库目录，例:C:\boost_1_79_0\stage\lib
-6. 配置属性->链接器->常规:"附加库目录":同上面的"库目录"，例:D:\my_workspace\C_program\C_boost\boost_1_79_0\stage\lib
+(1) "包含目录": boost的根目录，例:`C:\boost_1_79_0` or `D:\Software\boost_1_83_0`
+(2) "库目录": stage下的链接库目录，例:`C:\boost_1_79_0\stage\lib` or `D:\Software\boost_1_83_0\stage\lib`
+6. 配置属性->链接器->常规:"附加库目录":同上面的"库目录"，例:`C:\boost_1_79_0\stage\lib` or `D:\Software\boost_1_83_0\stage\lib`
 ## 下载rest_rpc
 ```bash
 git clone https://github.com/qicosmos/rest_rpc
