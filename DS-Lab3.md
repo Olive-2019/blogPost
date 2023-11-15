@@ -1,6 +1,6 @@
 ---
 title: DS_Lab3
-date: 2023-10-13 19:28:07
+date: 2023-11-08 19:28:07
 tags:
     - 分布式
     - KV
@@ -9,7 +9,16 @@ mit6.824 lab3 在lab2实现的Raft上实现一个KV数据库
 
 <!-- more -->
 # 说明
-lab2实现的Raft协议，可以保证一个服务器集群达成共识，而本实验则是通过lab2的共识算法实现一个分布式的KV数据库。
+
+使用Raft共识算法搭建一个提供**日志压缩**保证**线性一致性**的KV数据库。
+KV数据库将提供三个功能，对应三个接口Put(key, value)，Append(key, arg)，Get(key)。
+1. Put(key, value)：将key值的value赋值/替换成value
+2. Append(key, arg)：将key值的value赋值/追加上arg
+3. Get(key)：获取key值的value，若为空，则返回空字符串
+该KV数据库需要完成以下任务：
+1. 修改数据库状态命令的exactly one保证
+2. 命令压缩成字符串：在client端完成编码
+3. 写快照：将KV数据库压缩成一个文件写入
 # 模块设计
 共有两个项目，一个是建立在Raft上的KV server，一个是Clerk，即客户端
 ## KV server
