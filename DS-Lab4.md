@@ -32,6 +32,7 @@ KVServer增加Delete
 2. 若自己的shard数量减少了，则关闭get服务，等待PUT命令和开启服务请求
 
 # 详细设计
+将转移数据的影响降低到shard粒度上
 ## ShardCtrler
 使用KV数据库存储config，使用双向map存储
 ### config 数据特征
@@ -40,3 +41,16 @@ group-shard 1-n
 shardid从0开始计数，groupid从1开始计数
 shardid --> groupid（从0开始递增）
 -groupid --> groupAdress（即从-1开始递减）
+## ShardKV
+需要考虑在哪一层做这些处理
+内存保存当前的所有shard，不持久化（没必要，每次去shardCtler拉就行）
+轮询拉取本group的最新配置信息，若有变更，则进入服务迁移过程：(只检测是否有分片被转移即可)
+### 存在新分片
+不处理，让持有分片的group发送命令，待其传递完数据再将shardID加入本地配置中（由持有group发送该命令）
+### 分片被转移
+多个shard可以并发执行
+1. 将该shardID从内存配置中删除（相当于对外关闭该shard的服务）
+2. 向shardCtrler请求分片的新地址
+3. 向新地址发送该shard的所有数据
+4. 向新地址发送添加shardID的命令
+5. 删除本group的数据
