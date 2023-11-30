@@ -2,8 +2,10 @@
 title: 数据仓库ClickHouse
 date: 2023-11-02 16:20:21
 tags:
+- 数据仓库
+- Clickhouse
 ---
-clickhouse了解笔记
+列式存储的数据仓库
 <!-- more -->
 # 什么是clickhouse
 ClickHouse是一个用于联机分析(**OLAP**)的**列式**数据库管理系统(**DBMS**)。适用于**数仓**的数据存储
