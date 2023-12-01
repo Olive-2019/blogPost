@@ -1,5 +1,5 @@
 ---
-title: DS_Lab2
+title: DS_Lab2 Raft
 date: 2023-10-13 19:28:07
 tags:
     - 分布式
